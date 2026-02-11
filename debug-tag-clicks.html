@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Tag Clicks</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .debug-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tag {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 5px;
+            background: #3498db;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .tag:hover {
+            background: #2980b9;
+        }
+        .debug-log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-container">
+        <h1>Debug Tag Click Handlers</h1>
+        
+        <div>
+            <h3>Test Steps:</h3>
+            <ol>
+                <li>Click "Test Direct Click" to test basic click handling</li>
+                <li>Click "Test Event Delegation" to test the same method as the app</li>
+                <li>Click on the tags below</li>
+                <li>Check the debug log</li>
+            </ol>
+        </div>
+
+        <div>
+            <button id="test-direct" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px;">Test Direct Click</button>
+            <button id="test-delegation" style="padding: 10px 20px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px;">Test Event Delegation</button>
+        </div>
+
+        <div>
+            <h3>Test Tags:</h3>
+            <div id="tags-container">
+                <div class="tag" data-tag="artificial intelligence">artificial intelligence</div>
+                <div class="tag" data-tag="machine learning">machine learning</div>
+                <div class="tag" data-tag="neural networks">neural networks</div>
+            </div>
+        </div>
+
+        <div id="debug-log" class="debug-log">Debug log will appear here...</div>
+    </div>
+
+    <script>
+        const debugLog = document.getElementById('debug-log');
+        const testDirectBtn = document.getElementById('test-direct');
+        const testDelegationBtn = document.getElementById('test-delegation');
+        const tagsContainer = document.getElementById('tags-container');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            debugLog.textContent += logEntry;
+            debugLog.scrollTop = debugLog.scrollHeight;
+            
+            if (type === 'error') {
+                debugLog.className = 'debug-log error';
+            } else if (type === 'success') {
+                debugLog.className = 'debug-log success';
+            } else {
+                debugLog.className = 'debug-log';
+            }
+            
+            console.log(message);
+        }
+
+        // Test direct click handling
+        testDirectBtn.addEventListener('click', () => {
+            log('Testing direct click handling...');
+            
+            // Add direct click handlers to each tag
+            const tags = tagsContainer.querySelectorAll('.tag');
+            tags.forEach((tag, index) => {
+                tag.addEventListener('click', (e) => {
+                    const tagName = tag.getAttribute('data-tag') || tag.textContent.trim();
+                    log(`Direct click on tag ${index + 1}: ${tagName}`, 'success');
+                });
+            });
+            
+            log('Direct click handlers added to all tags', 'success');
+        });
+
+        // Test event delegation (same as the app)
+        testDelegationBtn.addEventListener('click', () => {
+            log('Testing event delegation...');
+            
+            // Use event delegation like the app does
+            tagsContainer.addEventListener('click', (e) => {
+                log(`Container clicked, target: ${e.target.tagName} ${e.target.className}`);
+                const tagElement = e.target.closest('.tag');
+                if (tagElement) {
+                    const tagName = tagElement.getAttribute('data-tag') || tagElement.textContent.trim();
+                    log(`Event delegation found tag: ${tagName}`, 'success');
+                } else {
+                    log('Event delegation: No .tag element found', 'error');
+                }
+            });
+            
+            log('Event delegation handler added to container', 'success');
+        });
+
+        // Test basic container clicks
+        tagsContainer.addEventListener('click', (e) => {
+            log(`Basic container click - target: ${e.target.tagName}, classes: ${e.target.className}`);
+        });
+
+        log('Debug page loaded. Click the test buttons first, then try clicking tags.');
+    </script>
+</body>
+</html>

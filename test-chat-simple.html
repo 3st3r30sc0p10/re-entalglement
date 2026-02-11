@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tag {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 5px;
+            background: #3498db;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .tag:hover {
+            background: #2980b9;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Simple Chat Interface Test</h1>
+        
+        <div>
+            <h3>Click on a tag to test chat:</h3>
+            <div id="tags-container">
+                <div class="tag" data-tag="artificial intelligence">artificial intelligence</div>
+                <div class="tag" data-tag="machine learning">machine learning</div>
+                <div class="tag" data-tag="neural networks">neural networks</div>
+            </div>
+        </div>
+
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script type="module">
+        import { ChatInterface } from './src/scripts/ChatInterface.js';
+        import { LLMIntegration } from './src/scripts/LLMIntegration.js';
+
+        function showResult(message, isError = false) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            resultDiv.style.display = 'block';
+        }
+
+        // Initialize chat interface
+        const chatInterface = new ChatInterface();
+        const tagsContainer = document.getElementById('tags-container');
+        
+        console.log('Setting up chat interface...');
+        chatInterface.setupTagClickHandlers(tagsContainer);
+        
+        // Test direct chat opening
+        window.testChat = function(tagName) {
+            console.log('Testing chat for tag:', tagName);
+            chatInterface.openChat(tagName);
+        };
+        
+        showResult('Chat interface initialized. Click on a tag to test.');
+    </script>
+</body>
+</html>

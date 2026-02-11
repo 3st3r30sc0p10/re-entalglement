@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy LLM Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .test-button:hover {
+            background: #2980b9;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Proxy LLM Test</h1>
+        
+        <div class="info">
+            <h3>Testing Local Proxy:</h3>
+            <p>This test uses the local proxy server to avoid CORS issues.</p>
+            <p><strong>Proxy URL:</strong> http://localhost:3001/proxy/llm</p>
+            <p><strong>Target API:</strong> https://litellm.oit.duke.edu/api/chat/completions</p>
+        </div>
+
+        <div>
+            <button class="test-button" onclick="testProxyConnection()">Test Proxy Connection</button>
+            <button class="test-button" onclick="testProxyMessage()">Test Proxy Message</button>
+            <button class="test-button" onclick="testProxyTagMessage()">Test Proxy Tag Message</button>
+        </div>
+
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        const PROXY_URL = 'http://localhost:3001/proxy/llm';
+
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+        }
+
+        async function testProxyConnection() {
+            showResult('Testing proxy connection...', 'info');
+            
+            try {
+                const response = await fetch(PROXY_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o',
+                        messages: [
+                            {
+                                role: 'user',
+                                content: 'Hello, can you respond with just "Proxy connection successful"?'
+                            }
+                        ]
+                    })
+                });
+
+                console.log('Proxy response status:', response.status);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+                console.log('Proxy response data:', data);
+
+                if (data.choices && data.choices[0] && data.choices[0].message) {
+                    showResult(`✅ Proxy Connection Successful!\n\nResponse: ${data.choices[0].message.content}\n\nFull Response:\n${JSON.stringify(data, null, 2)}`, 'success');
+                } else {
+                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Proxy test error:', error);
+                showResult(`❌ Proxy Connection Failed:\n\nError: ${error.message}\n\nStack: ${error.stack}`, 'error');
+            }
+        }
+
+        async function testProxyMessage() {
+            showResult('Testing proxy message...', 'info');
+            
+            try {
+                const response = await fetch(PROXY_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a helpful assistant that provides informative and engaging responses.'
+                            },
+                            {
+                                role: 'user',
+                                content: 'What is artificial intelligence?'
+                            }
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.choices && data.choices[0] && data.choices[0].message) {
+                    showResult(`✅ Proxy Message Test Successful!\n\nResponse: ${data.choices[0].message.content}`, 'success');
+                } else {
+                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Proxy message test error:', error);
+                showResult(`❌ Proxy Message Test Failed:\n\nError: ${error.message}`, 'error');
+            }
+        }
+
+        async function testProxyTagMessage() {
+            showResult('Testing proxy tag message...', 'info');
+            
+            try {
+                const response = await fetch(PROXY_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a helpful assistant that provides informative and engaging responses. Be conversational, helpful, and provide detailed explanations when appropriate. Keep responses concise but informative.'
+                            },
+                            {
+                                role: 'user',
+                                content: 'What can you tell me about "machine learning"?'
+                            }
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.choices && data.choices[0] && data.choices[0].message) {
+                    showResult(`✅ Proxy Tag Message Test Successful!\n\nResponse: ${data.choices[0].message.content}`, 'success');
+                } else {
+                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, 'error');
+                }
+
+            } catch (error) {
+                console.error('Proxy tag message test error:', error);
+                showResult(`❌ Proxy Tag Message Test Failed:\n\nError: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,393 @@
+// Chat Interface for Tag-based Conversations
+import { LLMIntegration } from './LLMIntegration.js';
+
+export class ChatInterface {
+    constructor() {
+        this.llmIntegration = new LLMIntegration();
+        this.chatModal = null;
+        this.chatMessages = null;
+        this.chatInput = null;
+        this.chatSendBtn = null;
+        this.chatStatus = null;
+        this.chatCloseBtn = null;
+        this.currentTag = null;
+        this.isLoading = false;
+        
+        this.initializeElements();
+        this.setupEventListeners();
+    }
+
+    /**
+     * Initialize DOM elements
+     */
+    initializeElements() {
+        this.chatModal = document.getElementById('chat-overlay-modal');
+        this.chatMessages = document.getElementById('chat-messages');
+        this.chatInput = document.getElementById('chat-input');
+        this.chatSendBtn = document.getElementById('chat-send');
+        this.chatStatus = document.getElementById('chat-status');
+        this.chatCloseBtn = document.getElementById('chat-close');
+        
+        // Debug: Check if elements were found
+        console.log('ChatInterface: Elements found:', {
+            chatModal: !!this.chatModal,
+            chatMessages: !!this.chatMessages,
+            chatInput: !!this.chatInput,
+            chatSendBtn: !!this.chatSendBtn,
+            chatStatus: !!this.chatStatus,
+            chatCloseBtn: !!this.chatCloseBtn
+        });
+    }
+
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Close button
+        if (this.chatCloseBtn) {
+            this.chatCloseBtn.addEventListener('click', () => this.closeChat());
+        }
+
+        // Overlay click to close
+        if (this.chatModal) {
+            this.chatModal.addEventListener('click', (e) => {
+                if (e.target === this.chatModal || e.target.classList.contains('chat-overlay')) {
+                    this.closeChat();
+                }
+            });
+        }
+
+        // Send button
+        if (this.chatSendBtn) {
+            this.chatSendBtn.addEventListener('click', () => this.sendMessage());
+        }
+
+        // Enter key to send message
+        if (this.chatInput) {
+            this.chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+
+            // Auto-resize textarea
+            this.chatInput.addEventListener('input', () => this.autoResizeTextarea());
+        }
+
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.isOpen()) {
+                this.closeChat();
+            }
+        });
+    }
+
+    /**
+     * Open chat interface for a specific tag
+     * @param {string} tag - The tag name to chat about
+     */
+    async openChat(tag) {
+        console.log('ChatInterface: openChat called with tag:', tag);
+        
+        if (!this.chatModal) {
+            console.error('Chat modal not found');
+            return;
+        }
+
+        this.currentTag = tag;
+        this.llmIntegration.resetConversation();
+        
+        // Update the title
+        const tagNameElement = document.getElementById('chat-tag-name');
+        if (tagNameElement) {
+            tagNameElement.textContent = tag;
+        }
+
+        // Clear previous messages
+        this.clearMessages();
+
+        // Show the modal
+        console.log('ChatInterface: Showing modal');
+        this.chatModal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+
+        // Focus on input
+        if (this.chatInput) {
+            this.chatInput.focus();
+        }
+
+        // Get initial response
+        await this.getInitialResponse();
+    }
+
+    /**
+     * Close the chat interface
+     */
+    closeChat() {
+        if (this.chatModal) {
+            this.chatModal.style.display = 'none';
+            document.body.style.overflow = '';
+        }
+        
+        this.currentTag = null;
+        this.llmIntegration.resetConversation();
+        this.clearMessages();
+    }
+
+    /**
+     * Check if chat is currently open
+     * @returns {boolean}
+     */
+    isOpen() {
+        return this.chatModal && this.chatModal.style.display === 'flex';
+    }
+
+    /**
+     * Get initial response from LLM
+     */
+    async getInitialResponse() {
+        console.log('ChatInterface: getInitialResponse called');
+        if (!this.currentTag) {
+            console.error('ChatInterface: No current tag set');
+            return;
+        }
+
+        console.log('ChatInterface: Getting initial response for tag:', this.currentTag);
+        this.setLoading(true);
+        this.updateStatus('Getting initial response...');
+
+        try {
+            console.log('ChatInterface: Calling LLM integration...');
+            const response = await this.llmIntegration.getInitialResponse(this.currentTag);
+            console.log('ChatInterface: Received response from LLM:', response);
+            this.addBotMessage(response);
+            this.updateStatus('');
+        } catch (error) {
+            console.error('ChatInterface: Error getting initial response:', error);
+            this.addBotMessage('I apologize, but I\'m having trouble connecting right now. Please try again.');
+            this.updateStatus('Connection error. Please try again.');
+        } finally {
+            this.setLoading(false);
+        }
+    }
+
+    /**
+     * Send a user message
+     */
+    async sendMessage() {
+        if (!this.chatInput || this.isLoading) return;
+
+        const message = this.chatInput.value.trim();
+        if (!message) return;
+
+        // Add user message to chat
+        this.addUserMessage(message);
+        
+        // Clear input
+        this.chatInput.value = '';
+        this.autoResizeTextarea();
+
+        // Set loading state
+        this.setLoading(true);
+        this.updateStatus('Thinking...');
+
+        try {
+            const response = await this.llmIntegration.sendMessage(message);
+            this.addBotMessage(response);
+            this.updateStatus('');
+        } catch (error) {
+            console.error('Error sending message:', error);
+            this.addBotMessage('I apologize, but I\'m having trouble processing your message right now. Please try again.');
+            this.updateStatus('Error sending message. Please try again.');
+        } finally {
+            this.setLoading(false);
+        }
+    }
+
+    /**
+     * Add a user message to the chat
+     * @param {string} message - The message text
+     */
+    addUserMessage(message) {
+        const messageElement = this.createMessageElement(message, 'user');
+        this.chatMessages.appendChild(messageElement);
+        this.scrollToBottom();
+    }
+
+    /**
+     * Add a bot message to the chat
+     * @param {string} message - The message text
+     */
+    addBotMessage(message) {
+        const messageElement = this.createMessageElement(message, 'bot');
+        this.chatMessages.appendChild(messageElement);
+        this.scrollToBottom();
+    }
+
+    /**
+     * Create a message element
+     * @param {string} text - The message text
+     * @param {string} type - 'user' or 'bot'
+     * @returns {HTMLElement} - The message element
+     */
+    createMessageElement(text, type) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${type}-message`;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = type === 'user' ? '👤' : '🤖';
+
+        const content = document.createElement('div');
+        content.className = 'message-content';
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'message-text';
+        textDiv.textContent = text;
+
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        content.appendChild(textDiv);
+        content.appendChild(timeDiv);
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(content);
+
+        return messageDiv;
+    }
+
+    /**
+     * Clear all messages from the chat
+     */
+    clearMessages() {
+        if (this.chatMessages) {
+            // Keep only the initial loading message
+            const initialMessage = this.chatMessages.querySelector('#initial-message');
+            if (initialMessage) {
+                this.chatMessages.innerHTML = `
+                    <div class="chat-message bot-message">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            <div class="message-text" id="initial-message">Loading...</div>
+                            <div class="message-time" id="initial-time"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                this.chatMessages.innerHTML = '';
+            }
+        }
+    }
+
+    /**
+     * Set loading state
+     * @param {boolean} loading - Whether to show loading state
+     */
+    setLoading(loading) {
+        this.isLoading = loading;
+        
+        if (this.chatSendBtn) {
+            this.chatSendBtn.disabled = loading;
+        }
+
+        if (this.chatInput) {
+            this.chatInput.disabled = loading;
+        }
+    }
+
+    /**
+     * Update status message
+     * @param {string} message - Status message
+     */
+    updateStatus(message) {
+        if (this.chatStatus) {
+            this.chatStatus.textContent = message;
+            this.chatStatus.className = message ? 'chat-status typing' : 'chat-status';
+        }
+    }
+
+    /**
+     * Auto-resize textarea based on content
+     */
+    autoResizeTextarea() {
+        if (!this.chatInput) return;
+
+        this.chatInput.style.height = 'auto';
+        this.chatInput.style.height = Math.min(this.chatInput.scrollHeight, 120) + 'px';
+    }
+
+    /**
+     * Scroll chat to bottom
+     */
+    scrollToBottom() {
+        if (this.chatMessages) {
+            this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+        }
+    }
+
+    /**
+     * Setup tag click handlers for the tags container
+     * @param {HTMLElement} tagsContainer - The tags container element
+     */
+    setupTagClickHandlers(tagsContainer) {
+        console.log('ChatInterface: Setting up tag click handlers for:', tagsContainer);
+        
+        if (!tagsContainer) {
+            console.error('ChatInterface: No tags container provided');
+            return;
+        }
+
+        // Use event delegation for dynamic tags
+        tagsContainer.addEventListener('click', (e) => {
+            console.log('ChatInterface: Tag container clicked:', e.target);
+            console.log('ChatInterface: Click event details:', {
+                target: e.target,
+                targetClass: e.target.className,
+                targetTag: e.target.tagName,
+                currentTarget: e.currentTarget
+            });
+            const tagElement = e.target.closest('.tag');
+            if (tagElement) {
+                const tagName = tagElement.getAttribute('data-tag') || tagElement.textContent.trim();
+                console.log('ChatInterface: Tag clicked:', tagName);
+                console.log('ChatInterface: Tag element:', tagElement);
+                if (tagName) {
+                    this.openChat(tagName);
+                }
+            } else {
+                console.log('ChatInterface: No .tag element found in click target');
+            }
+        });
+        
+        console.log('ChatInterface: Tag click handlers set up successfully');
+    }
+
+    /**
+     * Setup tail click handlers for the tail categories container
+     * @param {HTMLElement} tailContainer - The tail categories container element
+     */
+    setupTailClickHandlers(tailContainer) {
+        console.log('ChatInterface: Setting up tail click handlers for:', tailContainer);
+
+        if (!tailContainer) {
+            console.error('ChatInterface: No tail container provided');
+            return;
+        }
+
+        // Use event delegation for dynamic tail categories
+        tailContainer.addEventListener('click', (e) => {
+            const tailElement = e.target.closest('.tail-category');
+            if (tailElement) {
+                const tailLabel = tailElement.getAttribute('data-tail') || tailElement.textContent.trim();
+                console.log('ChatInterface: Tail category clicked:', tailLabel);
+                if (tailLabel) {
+                    this.openChat(tailLabel);
+                }
+            }
+        });
+
+        console.log('ChatInterface: Tail click handlers set up successfully');
+    }
+}

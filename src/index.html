@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+    <title>Video Network Visualization</title>
+</head>
+<body>
+    <main class="content-wrapper">
+        <aside class="left-panel">
+            <div class="middle-panel">
+                <div class="video-container" id="youtube-video-container">
+                    <!-- YouTube video iframe will be injected here -->
+                </div>
+            </div>
+
+            <div class="bottom-panel">
+                <!-- Tags container for video tags -->
+                <div class="bottom-tags-container" id="bottom-tags-container" style="display: none;">
+                    <div class="bottom-tags-list" id="bottom-tags-list"></div>
+                </div>
+                
+                <!-- Default content -->
+                <div class="bottom-default-content" id="bottom-default-content">
+                    <h3>Bottom Panel</h3>
+                    <p>Static content for future use</p>
+                </div>
+            </div>
+        </aside>
+
+        <section class="graph-container">
+            <div id="network-graph" style="width: 100%; height: 100%;"></div>
+            <div class="graph-controls">
+                <button id="zoom-in" data-action="zoom-in">+</button>
+                <button id="zoom-out" data-action="zoom-out">-</button>
+                <button id="zoom-reset" data-action="reset">Reset</button>
+            </div>
+        </section>
+
+        <aside class="right-panel">
+            <div class="video-info-panel">
+                <div class="video-metadata"></div>
+            </div>
+            <div class="tags-panel hidden">
+                <div class="tags-container"></div>
+            </div>
+            <div class="tail-categories-panel">
+                <div class="tail-categories-container"></div>
+            </div>
+        </aside>
+    </main>
+
+    <footer class="main-footer">
+        <p>Network Visualization Project</p>
+    </footer>
+
+    <!-- Image Gallery Modal -->
+    <div id="image-gallery-modal" class="gallery-modal" style="display: none;">
+        <div class="gallery-overlay"></div>
+        <div class="gallery-container">
+            <!-- Close button -->
+            <button class="gallery-close" id="gallery-close">&times;</button>
+            
+            <!-- Main image display -->
+            <div class="gallery-main">
+                <div class="gallery-image-container">
+                    <img id="gallery-main-image" src="" alt="" />
+                    <div class="gallery-loading" id="gallery-loading">Loading...</div>
+                </div>
+                
+                <!-- Navigation arrows -->
+                <button class="gallery-nav gallery-nav-left" id="gallery-prev">
+                    <span>&#8249;</span>
+                </button>
+                <button class="gallery-nav gallery-nav-right" id="gallery-next">
+                    <span>&#8250;</span>
+                </button>
+            </div>
+            
+            <!-- Image metadata panel -->
+            <div class="gallery-metadata">
+                <div class="gallery-metadata-content">
+                    <h3 id="gallery-image-title"></h3>
+                    <div class="gallery-metadata-details">
+                        <div class="metadata-item" id="gallery-image-artist"></div>
+                        <div class="metadata-item" id="gallery-image-culture"></div>
+                        <div class="metadata-item" id="gallery-image-license"></div>
+                        <div class="metadata-item" id="gallery-image-source"></div>
+                    </div>
+                </div>
+                <div class="gallery-actions">
+                    <button class="gallery-action-btn" id="gallery-download">
+                        <span>⬇</span> Download
+                    </button>
+                    <button class="gallery-action-btn" id="gallery-fullscreen">
+                        <span>⛶</span> Fullscreen
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Thumbnail strip -->
+            <div class="gallery-thumbnails">
+                <div class="gallery-thumbnails-container" id="gallery-thumbnails-container">
+                    <!-- Thumbnails will be populated by JavaScript -->
+                </div>
+            </div>
+            
+            <!-- Image counter -->
+            <div class="gallery-counter">
+                <span id="gallery-current">1</span> / <span id="gallery-total">1</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Overlay Modal -->
+    <div id="chat-overlay-modal" class="chat-modal" style="display: none;">
+        <div class="chat-overlay"></div>
+        <div class="chat-container">
+            <!-- Chat header -->
+            <div class="chat-header">
+                <div class="chat-title">
+                    <h3 id="chat-tag-title">Chat about: <span id="chat-tag-name"></span></h3>
+                </div>
+                <button class="chat-close" id="chat-close">&times;</button>
+            </div>
+            
+            <!-- Chat messages area -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message bot-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-text" id="initial-message">Loading...</div>
+                        <div class="message-time" id="initial-time"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat input area -->
+            <div class="chat-input-area">
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chat-input" 
+                        placeholder="Type your message here..." 
+                        rows="1"
+                        maxlength="1000"></textarea>
+                    <button id="chat-send" class="chat-send-btn">
+                        <span>Send</span>
+                        <span class="send-icon">➤</span>
+                    </button>
+                </div>
+                <div class="chat-status" id="chat-status"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

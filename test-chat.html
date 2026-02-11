@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tag {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .tag:hover {
+            background: #2980b9;
+            transform: scale(1.05);
+        }
+        .test-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Chat Interface Test</h1>
+        
+        <div class="test-info">
+            <h3>Test Instructions:</h3>
+            <ol>
+                <li>Click on any tag below to open the chat interface</li>
+                <li>The chat will start with an initial question about the tag</li>
+                <li>You can continue the conversation by typing messages</li>
+                <li>Press Enter to send messages or click the Send button</li>
+                <li>Press Escape or click the X to close the chat</li>
+            </ol>
+        </div>
+
+        <h3>Sample Tags (Click to test):</h3>
+        <div class="tags-container">
+            <div class="tag" data-tag="artificial intelligence">Artificial Intelligence</div>
+            <div class="tag" data-tag="machine learning">Machine Learning</div>
+            <div class="tag" data-tag="neural networks">Neural Networks</div>
+            <div class="tag" data-tag="data science">Data Science</div>
+            <div class="tag" data-tag="computer vision">Computer Vision</div>
+            <div class="tag" data-tag="natural language processing">Natural Language Processing</div>
+        </div>
+
+        <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+            <h4>API Configuration:</h4>
+            <p><strong>Endpoint:</strong> https://litellm.oit.duke.edu/api/chat/completions</p>
+            <p><strong>Model:</strong> gpt-4</p>
+            <p><strong>API Key:</strong> sk-dwAYbKw4KalzudSkQVcOWg</p>
+        </div>
+    </div>
+
+    <!-- Chat Overlay Modal -->
+    <div id="chat-overlay-modal" class="chat-modal" style="display: none;">
+        <div class="chat-overlay"></div>
+        <div class="chat-container">
+            <!-- Chat header -->
+            <div class="chat-header">
+                <div class="chat-title">
+                    <h3 id="chat-tag-title">Chat about: <span id="chat-tag-name"></span></h3>
+                </div>
+                <button class="chat-close" id="chat-close">&times;</button>
+            </div>
+            
+            <!-- Chat messages area -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message bot-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-text" id="initial-message">Loading...</div>
+                        <div class="message-time" id="initial-time"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat input area -->
+            <div class="chat-input-area">
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chat-input" 
+                        placeholder="Type your message here..." 
+                        rows="1"
+                        maxlength="1000"></textarea>
+                    <button id="chat-send" class="chat-send-btn">
+                        <span>Send</span>
+                        <span class="send-icon">➤</span>
+                    </button>
+                </div>
+                <div class="chat-status" id="chat-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the chat interface
+        import { ChatInterface } from './src/scripts/ChatInterface.js';
+        
+        // Initialize chat interface
+        const chatInterface = new ChatInterface();
+        
+        // Setup tag click handlers
+        const tagsContainer = document.querySelector('.tags-container');
+        chatInterface.setupTagClickHandlers(tagsContainer);
+        
+        console.log('Chat interface test initialized');
+    </script>
+</body>
+</html>

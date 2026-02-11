@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Chat Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .debug-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tag {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .tag:hover {
+            background: #2980b9;
+            transform: scale(1.05);
+        }
+        .debug-info {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .console-output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* Basic chat modal styles for testing */
+        .chat-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .chat-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        
+        .chat-container {
+            position: relative;
+            width: 90%;
+            max-width: 600px;
+            height: 80vh;
+            max-height: 700px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: #3498db;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chat-close {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        .chat-message {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: #3498db;
+            color: white;
+        }
+        
+        .message-content {
+            flex: 1;
+        }
+        
+        .message-text {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 18px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .message-time {
+            font-size: 11px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .chat-input-area {
+            background: white;
+            border-top: 1px solid #dee2e6;
+            padding: 20px;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        
+        #chat-input {
+            flex: 1;
+            min-height: 44px;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 22px;
+            background: white;
+            resize: none;
+            outline: none;
+        }
+        
+        .chat-send-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 22px;
+            cursor: pointer;
+        }
+        
+        .chat-status {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-container">
+        <h1>Debug Chat Interface</h1>
+        
+        <div class="debug-info">
+            <h3>Debug Information:</h3>
+            <p>This page tests the chat interface functionality independently.</p>
+            <p>Check the browser console for debug messages.</p>
+        </div>
+
+        <h3>Test Tags (Click to test):</h3>
+        <div class="tags-container">
+            <div class="tag" data-tag="artificial intelligence">Artificial Intelligence</div>
+            <div class="tag" data-tag="machine learning">Machine Learning</div>
+            <div class="tag" data-tag="neural networks">Neural Networks</div>
+        </div>
+
+        <div class="console-output" id="console-output">
+            <div>Console output will appear here...</div>
+        </div>
+    </div>
+
+    <!-- Chat Overlay Modal -->
+    <div id="chat-overlay-modal" class="chat-modal" style="display: none;">
+        <div class="chat-overlay"></div>
+        <div class="chat-container">
+            <!-- Chat header -->
+            <div class="chat-header">
+                <div class="chat-title">
+                    <h3 id="chat-tag-title">Chat about: <span id="chat-tag-name"></span></h3>
+                </div>
+                <button class="chat-close" id="chat-close">&times;</button>
+            </div>
+            
+            <!-- Chat messages area -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="chat-message bot-message">
+                    <div class="message-avatar">🤖</div>
+                    <div class="message-content">
+                        <div class="message-text" id="initial-message">Loading...</div>
+                        <div class="message-time" id="initial-time"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat input area -->
+            <div class="chat-input-area">
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chat-input" 
+                        placeholder="Type your message here..." 
+                        rows="1"
+                        maxlength="1000"></textarea>
+                    <button id="chat-send" class="chat-send-btn">
+                        <span>Send</span>
+                        <span class="send-icon">➤</span>
+                    </button>
+                </div>
+                <div class="chat-status" id="chat-status"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Override console.log to show in the page
+        const originalLog = console.log;
+        const originalError = console.error;
+        const consoleOutput = document.getElementById('console-output');
+        
+        function addToConsole(message, type = 'log') {
+            const div = document.createElement('div');
+            div.style.color = type === 'error' ? 'red' : 'black';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleOutput.appendChild(div);
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole(args.join(' '), 'error');
+        };
+        
+        // Import the chat interface
+        import { ChatInterface } from './src/scripts/ChatInterface.js';
+        
+        console.log('Starting debug test...');
+        
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, initializing chat interface...');
+            
+            try {
+                // Initialize chat interface
+                const chatInterface = new ChatInterface();
+                console.log('Chat interface created successfully');
+                
+                // Setup tag click handlers
+                const tagsContainer = document.querySelector('.tags-container');
+                console.log('Tags container found:', !!tagsContainer);
+                
+                if (tagsContainer) {
+                    chatInterface.setupTagClickHandlers(tagsContainer);
+                    console.log('Tag click handlers set up');
+                } else {
+                    console.error('Tags container not found');
+                }
+                
+                console.log('Debug test completed successfully');
+                
+            } catch (error) {
+                console.error('Error during initialization:', error);
+            }
+        });
+    </script>
+</body>
+</html>

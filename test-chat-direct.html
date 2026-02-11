@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tag {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 5px;
+            background: #3498db;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .tag:hover {
+            background: #2980b9;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Direct Chat Test</h1>
+        
+        <div>
+            <h3>Test the LLM API directly:</h3>
+            <button id="test-api-btn" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Test LLM API</button>
+        </div>
+
+        <div>
+            <h3>Test Tags (simulate click):</h3>
+            <div id="tags-container">
+                <div class="tag" data-tag="artificial intelligence">artificial intelligence</div>
+                <div class="tag" data-tag="machine learning">machine learning</div>
+                <div class="tag" data-tag="neural networks">neural networks</div>
+            </div>
+        </div>
+
+        <div id="result" class="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        const resultDiv = document.getElementById('result');
+        const testApiBtn = document.getElementById('test-api-btn');
+        const tagsContainer = document.getElementById('tags-container');
+
+        function showResult(message, isError = false) {
+            resultDiv.textContent = message;
+            resultDiv.className = `result ${isError ? 'error' : 'success'}`;
+            resultDiv.style.display = 'block';
+        }
+
+        // Test LLM API directly
+        testApiBtn.addEventListener('click', async () => {
+            try {
+                showResult('Testing LLM API...');
+                
+                const response = await fetch('http://localhost:3002/proxy/llm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'GPT 4.1',
+                        messages: [
+                            {
+                                role: 'user',
+                                content: 'Hello! Please respond with just the word "SUCCESS" if you can hear me.'
+                            }
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+
+                const data = await response.json();
+                const message = data.choices[0].message.content;
+                
+                showResult(`✅ LLM API Test Successful!\n\nResponse: ${message}\n\nFull response: ${JSON.stringify(data, null, 2)}`);
+                
+            } catch (error) {
+                showResult(`❌ LLM API Test Failed!\n\nError: ${error.message}`, true);
+            }
+        });
+
+        // Test tag clicks
+        tagsContainer.addEventListener('click', (e) => {
+            const tag = e.target.closest('.tag');
+            if (tag) {
+                const tagName = tag.getAttribute('data-tag');
+                showResult(`Tag clicked: ${tagName}\n\nThis simulates what should happen when you click a tag in the main app.`);
+            }
+        });
+    </script>
+</body>
+</html>
