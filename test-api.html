@@ -3,83 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Test</title>
+    <title>LLM proxy test (Gemini)</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .test-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .test-button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 10px 0;
-        }
-        .test-button:hover {
-            background: #2980b9;
-        }
-        .result {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 15px 0;
-            font-family: monospace;
-            font-size: 14px;
-            white-space: pre-wrap;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .error {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-        .success {
-            background: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5; }
+        .test-container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-button { background: #3498db; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 10px 0; }
+        .test-button:hover { background: #2980b9; }
+        .result { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; margin: 15px 0; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
     </style>
 </head>
 <body>
     <div class="test-container">
-        <h1>LLM API Test</h1>
-        
-        <div>
-            <h3>API Configuration:</h3>
-            <p><strong>URL:</strong> https://litellm.oit.duke.edu/v1/chat/completions</p>
-            <p><strong>Model:</strong> GPT 4.1</p>
-            <p><strong>API Key:</strong> sk-dwAYbKw4KalzudSkQVcOWg</p>
-        </div>
+        <h1>LLM proxy test</h1>
+        <p>Calls <code>POST /proxy/llm</code> on the local app server (default: Gemini via <code>.env</code>). Start <code>node server.js</code> first.</p>
+        <p><strong>Proxy:</strong> <code id="proxy-url"></code></p>
 
         <div>
-            <button class="test-button" onclick="testAPI()">Test API Connection</button>
-            <button class="test-button" onclick="testSimpleMessage()">Test Simple Message</button>
-            <button class="test-button" onclick="testTagMessage()">Test Tag Message</button>
-            <button class="test-button" onclick="testDifferentModels()">Test Different Models</button>
+            <button class="test-button" onclick="testAPI()">Test connection</button>
+            <button class="test-button" onclick="testSimpleMessage()">Simple message</button>
+            <button class="test-button" onclick="testTagMessage()">Tag-style message</button>
+            <button class="test-button" onclick="testDifferentModels()">Try Gemini model ids</button>
         </div>
 
         <div id="result" class="result" style="display: none;"></div>
     </div>
 
     <script>
-        const API_URL = 'https://litellm.oit.duke.edu/v1/chat/completions';
-        const API_KEY = 'sk-dwAYbKw4KalzudSkQVcOWg';
-        const MODEL = 'GPT 4.1';
+        const PROXY_URL = 'http://127.0.0.1:3001/proxy/llm';
+        const MODEL = 'gemini-2.5-flash';
+        document.getElementById('proxy-url').textContent = PROXY_URL;
 
         function showResult(message, isError = false) {
             const resultDiv = document.getElementById('result');
@@ -88,201 +42,86 @@
             resultDiv.style.display = 'block';
         }
 
+        async function postProxy(payload) {
+            const response = await fetch(PROXY_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const text = await response.text();
+            let data;
+            try { data = JSON.parse(text); } catch { throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`); }
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 800)}`);
+            return data;
+        }
+
         async function testAPI() {
-            showResult('Testing API connection...', false);
-            
+            showResult('Testing…', false);
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: MODEL,
-                        messages: [
-                            {
-                                role: 'system',
-                                content: 'You are a helpful assistant.'
-                            },
-                            {
-                                role: 'user',
-                                content: 'Hello, can you respond with just "API connection successful"?'
-                            }
-                        ]
-                    })
+                const data = await postProxy({
+                    model: MODEL,
+                    messages: [
+                        { role: 'system', content: 'You are a helpful assistant.' },
+                        { role: 'user', content: 'Reply with exactly: OK' },
+                    ],
                 });
-
-                console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers);
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-
-                const data = await response.json();
-                console.log('Response data:', data);
-
-                if (data.choices && data.choices[0] && data.choices[0].message) {
-                    showResult(`✅ API Connection Successful!\n\nResponse: ${data.choices[0].message.content}\n\nFull Response:\n${JSON.stringify(data, null, 2)}`, false);
+                if (data.choices?.[0]?.message?.content != null) {
+                    showResult(`OK\n\n${data.choices[0].message.content}\n\n${JSON.stringify(data, null, 2)}`, false);
                 } else {
-                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, true);
+                    showResult(`Unexpected shape:\n${JSON.stringify(data, null, 2)}`, true);
                 }
-
-            } catch (error) {
-                console.error('API test error:', error);
-                showResult(`❌ API Connection Failed:\n\nError: ${error.message}\n\nStack: ${error.stack}`, true);
+            } catch (e) {
+                showResult(`Failed: ${e.message}`, true);
             }
         }
 
         async function testSimpleMessage() {
-            showResult('Testing simple message...', false);
-            
+            showResult('Testing…', false);
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: MODEL,
-                        messages: [
-                            {
-                                role: 'system',
-                                content: 'You are a helpful assistant that provides informative and engaging responses.'
-                            },
-                            {
-                                role: 'user',
-                                content: 'What is artificial intelligence?'
-                            }
-                        ]
-                    })
+                const data = await postProxy({
+                    model: MODEL,
+                    messages: [
+                        { role: 'user', content: 'What is a haiku? One sentence.' },
+                    ],
                 });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-
-                const data = await response.json();
-
-                if (data.choices && data.choices[0] && data.choices[0].message) {
-                    showResult(`✅ Simple Message Test Successful!\n\nResponse: ${data.choices[0].message.content}`, false);
-                } else {
-                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, true);
-                }
-
-            } catch (error) {
-                console.error('Simple message test error:', error);
-                showResult(`❌ Simple Message Test Failed:\n\nError: ${error.message}`, true);
+                showResult(data.choices?.[0]?.message?.content || JSON.stringify(data), false);
+            } catch (e) {
+                showResult(`Failed: ${e.message}`, true);
             }
         }
 
         async function testTagMessage() {
-            showResult('Testing tag-based message...', false);
-            
+            showResult('Testing…', false);
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: MODEL,
-                        messages: [
-                            {
-                                role: 'system',
-                                content: 'You are a helpful assistant that provides informative and engaging responses. Be conversational, helpful, and provide detailed explanations when appropriate. Keep responses concise but informative.'
-                            },
-                            {
-                                role: 'user',
-                                content: 'What can you tell me about "machine learning"?'
-                            }
-                        ]
-                    })
+                const data = await postProxy({
+                    model: MODEL,
+                    messages: [
+                        { role: 'user', content: 'What can you tell me about "machine learning" in two sentences?' },
+                    ],
                 });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-
-                const data = await response.json();
-
-                if (data.choices && data.choices[0] && data.choices[0].message) {
-                    showResult(`✅ Tag Message Test Successful!\n\nResponse: ${data.choices[0].message.content}`, false);
-                } else {
-                    showResult(`❌ Unexpected response format:\n${JSON.stringify(data, null, 2)}`, true);
-                }
-
-            } catch (error) {
-                console.error('Tag message test error:', error);
-                showResult(`❌ Tag Message Test Failed:\n\nError: ${error.message}`, true);
+                showResult(data.choices?.[0]?.message?.content || JSON.stringify(data), false);
+            } catch (e) {
+                showResult(`Failed: ${e.message}`, true);
             }
         }
 
         async function testDifferentModels() {
-            showResult('Testing different models...', false);
-            
-            const models = ['gpt-4o', 'gpt-4', 'gpt-3.5-turbo', 'claude-3-sonnet', 'claude-3-haiku'];
-            let workingModels = [];
-            let failedModels = [];
-            
+            const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'];
+            const ok = [];
+            const bad = [];
             for (const model of models) {
                 try {
-                    showResult(`Testing model: ${model}...`, false);
-                    
-                    const response = await fetch(API_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${API_KEY}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: model,
-                            messages: [
-                                {
-                                    role: 'user',
-                                    content: 'Hello'
-                                }
-                            ]
-                        })
+                    const data = await postProxy({
+                        model,
+                        messages: [{ role: 'user', content: 'Say hi in one word.' }],
                     });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.choices && data.choices[0] && data.choices[0].message) {
-                            workingModels.push(model);
-                        } else {
-                            failedModels.push(`${model} (invalid response format)`);
-                        }
-                    } else {
-                        const errorText = await response.text();
-                        failedModels.push(`${model} (HTTP ${response.status})`);
-                    }
-                } catch (error) {
-                    failedModels.push(`${model} (${error.message})`);
+                    if (data.choices?.[0]?.message?.content != null) ok.push(model);
+                    else bad.push(`${model} (bad shape)`);
+                } catch (e) {
+                    bad.push(`${model}: ${e.message}`);
                 }
             }
-            
-            let result = 'Model Test Results:\n\n';
-            if (workingModels.length > 0) {
-                result += `✅ Working Models:\n${workingModels.join('\n')}\n\n`;
-            }
-            if (failedModels.length > 0) {
-                result += `❌ Failed Models:\n${failedModels.join('\n')}\n\n`;
-            }
-            
-            if (workingModels.length === 0) {
-                result += 'No working models found. Check API key and endpoint.';
-                showResult(result, true);
-            } else {
-                result += `Recommended model: ${workingModels[0]}`;
-                showResult(result, false);
-            }
+            showResult(`Working: ${ok.join(', ') || '(none)'}\n\nFailed:\n${bad.join('\n')}`, bad.length && !ok.length);
         }
     </script>
 </body>

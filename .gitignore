@@ -18,12 +18,19 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Env / secrets
+# Env / secrets (keep .env.example tracked as a template)
 .env
 .env.*
+!.env.example
 
 # Test artifacts
 jest-html-reporters-*
+
+# Anonymous feedback collected at runtime (do not commit)
+data/feedback.jsonl
+
+# Portable build output (regenerate with `yarn portable`)
+re-entanglement-portable.zip
 
 # Misc
 *.tmp

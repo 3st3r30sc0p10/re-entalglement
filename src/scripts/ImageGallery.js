@@ -16,7 +16,6 @@ export class ImageGallery {
         this.cultureElement = document.getElementById('gallery-image-culture');
         this.licenseElement = document.getElementById('gallery-image-license');
         this.sourceElement = document.getElementById('gallery-image-source');
-        this.downloadBtn = document.getElementById('gallery-download');
         this.fullscreenBtn = document.getElementById('gallery-fullscreen');
 
         this.images = [];
@@ -29,10 +28,11 @@ export class ImageGallery {
             'nypl': 'New York Public Library',
             'met': 'Metropolitan Museum of Art',
             'openverse': 'Openverse (Creative Commons)',
-            'rijksmuseum': 'Rijksmuseum',
             'europeana': 'Europeana',
             'commons': 'Wikimedia Commons',
-            'smithsonian': 'Smithsonian Institution'
+            'smithsonian': 'Smithsonian Institution',
+            'cleveland': 'Cleveland Museum of Art',
+            publication: 'Publication (project set)'
         };
 
         this.initializeEventListeners();
@@ -52,7 +52,6 @@ export class ImageGallery {
         this.nextBtn.addEventListener('click', () => this.nextImage());
         
         // Action buttons
-        this.downloadBtn.addEventListener('click', () => this.downloadImage());
         this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
         
         // Keyboard navigation
@@ -101,7 +100,7 @@ export class ImageGallery {
         if (this.images.length === 0) return;
 
         const currentImage = this.images[this.currentIndex];
-        this.loading.style.display = 'block';
+        this.loading.style.display = 'flex';
         this.mainImage.style.opacity = '0';
 
         // Create new image to preload
@@ -222,37 +221,6 @@ export class ImageGallery {
                 this.toggleFullscreen();
                 break;
         }
-    }
-
-    downloadImage() {
-        if (this.images.length === 0) return;
-
-        const currentImage = this.images[this.currentIndex];
-        const imageUrl = currentImage.fullUrl || currentImage.thumbnailUrl;
-        const title = currentImage.title || 'image';
-        
-        // Create a temporary link element to trigger download
-        const link = document.createElement('a');
-        link.href = imageUrl;
-        link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.jpg`;
-        link.target = '_blank';
-        
-        // For cross-origin images, we need to fetch and create a blob
-        fetch(imageUrl)
-            .then(response => response.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                link.href = url;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-            })
-            .catch(error => {
-                console.error('Download failed:', error);
-                // Fallback: open in new tab
-                window.open(imageUrl, '_blank');
-            });
     }
 
     toggleFullscreen() {

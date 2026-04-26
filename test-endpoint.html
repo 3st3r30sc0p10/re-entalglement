@@ -3,84 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Endpoint Test</title>
+    <title>Local LLM server checks</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .test-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .test-button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            margin: 10px 0;
-        }
-        .test-button:hover {
-            background: #2980b9;
-        }
-        .result {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 15px 0;
-            font-family: monospace;
-            font-size: 14px;
-            white-space: pre-wrap;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .error {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-        .success {
-            background: #d4edda;
-            border-color: #c3e6cb;
-            color: #155724;
-        }
-        .info {
-            background: #d1ecf1;
-            border-color: #bee5eb;
-            color: #0c5460;
-        }
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5; }
+        .test-container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .test-button { background: #3498db; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; margin: 10px 0; }
+        .test-button:hover { background: #2980b9; }
+        .result { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; padding: 15px; margin: 15px 0; font-family: monospace; font-size: 14px; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
     </style>
 </head>
 <body>
     <div class="test-container">
-        <h1>API Endpoint Test</h1>
-        
+        <h1>Local app LLM checks</h1>
         <div class="info">
-            <h3>Testing Different Endpoints:</h3>
-            <p>Let's test various possible endpoints to find the correct one.</p>
+            <p>Tests the dev server (default <code>http://127.0.0.1:3001</code>). Start <code>node server.js</code> or <code>yarn start</code> first. LLM defaults to Gemini via <code>.env</code>; no API keys in this page.</p>
         </div>
-
+        <p><strong>Base URL:</strong> <code id="base"></code></p>
         <div>
-            <button class="test-button" onclick="testOriginalEndpoint()">Test Original Endpoint</button>
-            <button class="test-button" onclick="testAlternativeEndpoints()">Test Alternative Endpoints</button>
-            <button class="test-button" onclick="testBasicConnectivity()">Test Basic Connectivity</button>
+            <button class="test-button" onclick="testLlmMeta()">GET /api/llm-meta</button>
+            <button class="test-button" onclick="testProxyPing()">POST /proxy/llm (minimal)</button>
+            <button class="test-button" onclick="testAll()">Run both</button>
         </div>
-
         <div id="result" class="result" style="display: none;"></div>
     </div>
-
     <script>
-        const API_KEY = 'sk-dwAYbKw4KalzudSkQVcOWg';
-        const ORIGINAL_URL = 'https://litellm.oit.duke.edu/api/chat/completions';
+        const BASE = 'http://127.0.0.1:3001';
+        document.getElementById('base').textContent = BASE;
 
         function showResult(message, type = 'info') {
             const resultDiv = document.getElementById('result');
@@ -89,94 +40,45 @@
             resultDiv.style.display = 'block';
         }
 
-        async function testOriginalEndpoint() {
-            showResult('Testing original endpoint...', 'info');
-            
+        async function testLlmMeta() {
+            showResult('Fetching /api/llm-meta…', 'info');
             try {
-                const response = await fetch(ORIGINAL_URL, {
-                    method: 'GET', // Try GET first to see if endpoint exists
-                    headers: {
-                        'Authorization': `Bearer ${API_KEY}`,
-                        'Content-Type': 'application/json'
-                    }
+                const res = await fetch(`${BASE}/api/llm-meta`);
+                const text = await res.text();
+                let body;
+                try { body = JSON.parse(text); } catch { body = text; }
+                showResult(`Status: ${res.status}\n\n${typeof body === 'string' ? body : JSON.stringify(body, null, 2)}`, res.ok ? 'success' : 'error');
+            } catch (e) {
+                showResult(`Error: ${e.message}`, 'error');
+            }
+        }
+
+        async function testProxyPing() {
+            showResult('POST /proxy/llm…', 'info');
+            try {
+                const res = await fetch(`${BASE}/proxy/llm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'gemini-2.5-flash',
+                        messages: [{ role: 'user', content: 'Reply with exactly: PONG' }],
+                    }),
                 });
-
-                showResult(`Original endpoint response:\nStatus: ${response.status}\nStatus Text: ${response.statusText}\nHeaders: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`, 
-                    response.ok ? 'success' : 'error');
-
-            } catch (error) {
-                showResult(`Original endpoint error:\n${error.message}`, 'error');
+                const text = await res.text();
+                let body;
+                try { body = JSON.parse(text); } catch { body = text; }
+                showResult(`Status: ${res.status}\n\n${typeof body === 'string' ? body : JSON.stringify(body, null, 2)}`, res.ok ? 'success' : 'error');
+            } catch (e) {
+                showResult(`Error: ${e.message}`, 'error');
             }
         }
 
-        async function testAlternativeEndpoints() {
-            showResult('Testing alternative endpoints...', 'info');
-            
-            const endpoints = [
-                'https://litellm.oit.duke.edu/v1/chat/completions',
-                'https://litellm.oit.duke.edu/chat/completions',
-                'https://litellm.oit.duke.edu/api/v1/chat/completions',
-                'https://api.litellm.oit.duke.edu/chat/completions',
-                'https://litellm.duke.edu/api/chat/completions',
-                'https://litellm.duke.edu/v1/chat/completions'
-            ];
-
-            let results = 'Alternative Endpoint Test Results:\n\n';
-
-            for (const endpoint of endpoints) {
-                try {
-                    const response = await fetch(endpoint, {
-                        method: 'GET',
-                        headers: {
-                            'Authorization': `Bearer ${API_KEY}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-
-                    results += `${endpoint}\nStatus: ${response.status} ${response.statusText}\n`;
-                    
-                    if (response.ok) {
-                        results += '✅ Endpoint accessible\n';
-                    } else {
-                        results += `❌ Error: ${response.status}\n`;
-                    }
-                    results += '\n';
-
-                } catch (error) {
-                    results += `${endpoint}\n❌ Connection Error: ${error.message}\n\n`;
-                }
-            }
-
-            showResult(results, 'info');
-        }
-
-        async function testBasicConnectivity() {
-            showResult('Testing basic connectivity...', 'info');
-            
-            const testUrls = [
-                'https://www.google.com',
-                'https://httpbin.org/get',
-                'https://litellm.oit.duke.edu',
-                'https://duke.edu'
-            ];
-
-            let results = 'Basic Connectivity Test:\n\n';
-
-            for (const url of testUrls) {
-                try {
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        mode: 'no-cors' // This will help us see if it's a CORS issue
-                    });
-
-                    results += `${url}\nStatus: ${response.status || 'No-CORS mode'}\n✅ Accessible\n\n`;
-
-                } catch (error) {
-                    results += `${url}\n❌ Error: ${error.message}\n\n`;
-                }
-            }
-
-            showResult(results, 'info');
+        async function testAll() {
+            await testLlmMeta();
+            const first = document.getElementById('result').textContent;
+            await testProxyPing();
+            const second = document.getElementById('result').textContent;
+            showResult(`--- /api/llm-meta ---\n${first}\n\n--- /proxy/llm ---\n${second}`, 'info');
         }
     </script>
 </body>

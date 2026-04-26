@@ -1,0 +1,119 @@
+/**
+ * Design tokens — 3-level visual hierarchy (single source of truth).
+ *
+ * Level 1 — MAIN (charcoal):  primary structure, headers/footers, main text emphasis, video nodes
+ * Level 2 — SECONDARY (amber): tags, secondary chrome, links & interactive accent
+ * Level 3 — TERTIARY (red):    tail concepts, tertiary emphasis, strong alerts
+ *
+ * **Definitive product style — Option 3 “Charcoal & Amber”.** Change only the --color-level-* anchors
+ * to adjust the theme (CSS + graph read --graph-* on each redraw).
+ */
+
+:root {
+  /* ========== Hierarchy anchors (Charcoal & Amber — definitive) ========== */
+  --color-level-1-main: #1c1917;
+  --color-level-1-main-muted: #44403c;
+  --color-level-1-main-soft: #57534e;
+
+  --color-level-2-secondary: #d97706;
+  --color-level-2-secondary-light: #f59e0b;
+  --color-level-2-secondary-dark: #b45309;
+
+  --color-level-3-tertiary: #b91c1c;
+  --color-level-3-tertiary-light: #f87171;
+  --color-level-3-tertiary-dark: #991b1b;
+
+  /* ========== Semantic aliases (use in components) ========== */
+  --color-primary: var(--color-level-1-main);
+  --color-secondary: var(--color-level-2-secondary);
+  --color-tertiary: var(--color-level-3-tertiary);
+  --color-tertiary-dark: var(--color-level-3-tertiary-dark);
+  --color-tertiary-light: var(--color-level-3-tertiary-light);
+
+  --color-primary-dark: var(--color-level-1-main-muted);
+  --color-primary-light: var(--color-level-1-main-soft);
+  --color-primary-very-light: rgba(28, 25, 23, 0.07);
+
+  --color-secondary-dark: var(--color-level-2-secondary-dark);
+  --color-secondary-light: var(--color-level-2-secondary-light);
+  --color-secondary-very-light: rgba(217, 119, 6, 0.12);
+
+  /* ========== Surfaces ========== */
+  --color-background: #f7f5f2;
+  --color-background-alt: #ffffff;
+  --color-background-on-dark: #ffffff;
+  --color-background-primary: rgba(28, 25, 23, 0.06);
+  --color-background-secondary: rgba(217, 119, 6, 0.08);
+  --color-background-tertiary: rgba(185, 28, 28, 0.07);
+
+  /* Body decorative stripes (derived from hierarchy) */
+  --color-pattern-stripe-l1: rgba(28, 25, 23, 0.045);
+  --color-pattern-stripe-l2: rgba(245, 158, 11, 0.06);
+
+  /* ========== Typography ========== */
+  --color-text: var(--color-level-1-main-muted);
+  --color-text-light: #5c6370;
+  --color-text-dark: var(--color-level-1-main);
+  --color-text-primary: var(--color-level-1-main);
+  --color-text-secondary: var(--color-level-2-secondary-dark);
+  --color-text-tertiary: var(--color-level-3-tertiary-dark);
+  --color-text-inverse: #ffffff;
+  --font-family: "Host Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+
+  /* ========== Accent & status ========== */
+  --color-accent: var(--color-secondary);
+  --color-accent-hover: var(--color-secondary-dark);
+  --color-accent-red: var(--color-tertiary);
+
+  --color-success: #15803d;
+  --color-warning: var(--color-level-2-secondary-light);
+  --color-error: var(--color-level-3-tertiary);
+  --color-info: var(--color-secondary);
+
+  /* ========== Chrome: header, footer, borders ========== */
+  --color-header-footer-bg: var(--color-level-1-main);
+  --color-header-footer-text: var(--color-text-inverse);
+
+  --color-border-subtle: rgba(28, 25, 23, 0.1);
+  --color-border-default: rgba(28, 25, 23, 0.14);
+  --color-border-strong: var(--color-level-1-main-soft);
+  --color-border-secondary: rgba(217, 119, 6, 0.35);
+  --color-border-tertiary: rgba(185, 28, 28, 0.35);
+
+  --color-panel-surface: var(--color-background-alt);
+  --color-panel-border: var(--color-border-default);
+  --color-panel-muted-bg: rgba(255, 255, 255, 0.88);
+
+  /* ========== Network graph (read by NetworkGraph.js) ========== */
+  --graph-node-video: var(--color-level-1-main);
+  --graph-node-tag: var(--color-level-2-secondary-light);
+  --graph-node-tail: var(--color-level-3-tertiary-light);
+  --graph-link-video-tag: #8b939c;
+  --graph-link-video-video: #6b7280;
+  --graph-link-video-tail: var(--color-level-3-tertiary-light);
+
+  --color-edge: var(--graph-link-video-tag);
+  --color-edge-highlighted: var(--color-level-2-secondary-light);
+
+  --graph-label-fill: var(--color-text-dark);
+  --graph-label-stroke: #ffffff;
+
+  /* Fallback for legacy option key */
+  --color-node: var(--graph-node-video);
+
+  /* ========== Embeds & loaders ========== */
+  /* Dark surface for canvas loaders (charcoal + hint of amber) */
+  --color-loading-canvas-fill: #1c1410;
+  --color-chat-tint: rgba(217, 119, 6, 0.1);
+
+  /* ========== Layout (non-color; kept with theme for one import) ========== */
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 0.5rem;
+  --header-height: 4rem;
+  --panel-width: 300px;
+  --right-panel-section-height: calc(100vh / 3);
+  --opacity-link: 1;
+  --opacity-link-faded: 0.22;
+}

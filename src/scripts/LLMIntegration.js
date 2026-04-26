@@ -1,10 +1,88 @@
 // LLM API Integration for Chat Interface
+//
+// `model` is synced from `GET /api/llm-meta` on first send. The server maps Gemini ids away when
+// `LLM_PROVIDER=openai`; set `LLM_DEFAULT_MODEL` / `LLM_OPENAI_FALLBACK_MODEL` in `.env` for LiteLLM allowlists.
+
+/** Matches the Entanglement custom model system prompt on the chat server when used standalone. */
+const ENTANGLEMENT_SYSTEM_PROMPT =
+    'You are an academic expert on topics related to climate change, decolonialism, and Black critical theory. Drawing on your expertise, respond thoughtfully to any questions about the data so that users can explore specific topics in greater depth. ' +
+    'Treat **Climate Change**, **Decolonization**, and **Global Blackness** as three analytical lenses. In your **first** assistant reply of a conversation (when there is no prior assistant message in the thread), make those three perspectives **explicit** in the answer—not as empty labels, but as clearly connected parts of your response. In **follow-up** replies, bring those three perspectives in explicitly **only** when the user asks for them or clearly frames the question around one or more of them; otherwise answer directly without structuring around those three themes. ' +
+    'At the very end of every response, after your main answer, add a short section titled **References** (or equivalent) listing **exactly two** bibliographical references: real, citable books or articles that are among the most relevant scholarly texts to the topic under discussion. Use full reference style (author, title, publisher or journal, year where known). ' +
+    'If you are uncertain about a detail for a reference, prefer well-known foundational or widely cited works in the field rather than inventing citations.';
+
+/** Injected by webpack (`''` in production → use page origin). */
+function devBackendOrigin() {
+    // eslint-disable-next-line no-undef -- replaced at compile time
+    const v = __BACKEND_ORIGIN__;
+    return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+function getLlmProxyUrl() {
+    const backend = devBackendOrigin();
+    if (backend) return `${backend}/proxy/llm`;
+    if (typeof window === 'undefined') return 'http://127.0.0.1:3001/proxy/llm';
+    const { origin, protocol } = window.location;
+    if (protocol === 'file:' || !origin) return 'http://127.0.0.1:3001/proxy/llm';
+    return `${origin}/proxy/llm`;
+}
+
+function getLlmMetaUrl() {
+    const backend = devBackendOrigin();
+    if (backend) return `${backend}/api/llm-meta`;
+    if (typeof window === 'undefined') return 'http://127.0.0.1:3001/api/llm-meta';
+    const { origin, protocol } = window.location;
+    if (protocol === 'file:' || !origin) return 'http://127.0.0.1:3001/api/llm-meta';
+    return `${origin}/api/llm-meta`;
+}
+
 export class LLMIntegration {
     constructor() {
-        this.apiUrl = 'http://localhost:3001/proxy/llm'; // Use local proxy to avoid CORS issues
-        this.apiKey = 'sk-dwAYbKw4KalzudSkQVcOWg'; // Not needed for proxy but kept for reference
-        this.model = 'GPT 4.1'; // Using GPT 4.1 which is available on Duke's LiteLLM
+        /** Resolved on each request so dev/prod URLs never go stale after HMR. */
+        this._llmTransportLogged = false;
+        /** Overwritten from `GET /api/llm-meta` before the first chat request. */
+        this.model = 'gemini-2.5-flash';
+        /** `'gemini' | 'openai-compatible' | null` after meta fetch. */
+        this._llmProvider = null;
         this.conversationHistory = [];
+        /** True after we attempt `/api/llm-meta` once (success or failure). */
+        this._llmMetaLoadAttempted = false;
+    }
+
+    /** Align `this.model` with server `.env` (e.g. Gemini model id when `LLM_PROVIDER=gemini`). */
+    async _syncModelFromServer() {
+        if (this._llmMetaLoadAttempted) return;
+        this._llmMetaLoadAttempted = true;
+        try {
+            const r = await fetch(getLlmMetaUrl(), { headers: { Accept: 'application/json' } });
+            const ct = (r.headers.get('content-type') || '').toLowerCase();
+            if (!r.ok) {
+                console.warn('LLMIntegration: /api/llm-meta HTTP', r.status);
+                return;
+            }
+            if (!ct.includes('application/json')) {
+                console.warn(
+                    'LLMIntegration: /api/llm-meta returned non-JSON (SPA catch-all or wrong server?). Content-Type:',
+                    ct.slice(0, 80)
+                );
+                return;
+            }
+            const j = await r.json();
+            if (j && typeof j.provider === 'string') {
+                this._llmProvider = j.provider === 'gemini' ? 'gemini' : 'openai-compatible';
+            }
+            if (j && typeof j.defaultModel === 'string' && j.defaultModel.trim()) {
+                this.model = j.defaultModel.trim();
+            }
+        } catch (e) {
+            console.warn('LLMIntegration: /api/llm-meta failed', e);
+        }
+        const m = String(this.model || '').trim();
+        const looksGemini = /gemini/i.test(m);
+        if (!m) {
+            this.model = this._llmProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o';
+        } else if (this._llmProvider === 'openai-compatible' && looksGemini) {
+            this.model = 'gpt-4o';
+        }
     }
 
     /**
@@ -33,7 +111,19 @@ export class LLMIntegration {
      */
     async sendMessage(message, isInitial = false) {
         console.log('LLMIntegration: sendMessage called with:', { message, isInitial });
-        
+
+        if (!this._llmTransportLogged) {
+            this._llmTransportLogged = true;
+            console.info('[LLM transport]', {
+                devBackendOrigin: devBackendOrigin(),
+                metaUrl: getLlmMetaUrl(),
+                proxyUrl: getLlmProxyUrl(),
+                pageOrigin: typeof window !== 'undefined' ? window.location.origin : '(ssr)',
+            });
+        }
+
+        await this._syncModelFromServer();
+
         try {
             // Add user message to conversation history
             this.conversationHistory.push({
@@ -47,16 +137,17 @@ export class LLMIntegration {
                 messages: [
                     {
                         role: 'system',
-                        content: 'You are a helpful assistant that provides informative and engaging responses. Be conversational, helpful, and provide detailed explanations when appropriate. Keep responses concise but informative.'
+                        content: ENTANGLEMENT_SYSTEM_PROMPT
                     },
                     ...this.conversationHistory
                 ]
             };
 
-            console.log('LLMIntegration: Sending request to:', this.apiUrl);
+            const proxyUrl = getLlmProxyUrl();
+            console.log('LLMIntegration: Sending request to:', proxyUrl);
             console.log('LLMIntegration: Request data:', requestData);
 
-            const response = await fetch(this.apiUrl, {
+            const response = await fetch(proxyUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -72,19 +163,30 @@ export class LLMIntegration {
 
             if (!response.ok) {
                 const errorText = await response.text();
+                let detail = errorText.slice(0, 800);
+                try {
+                    const ej = JSON.parse(errorText);
+                    detail = (ej.details || ej.error || detail).toString().slice(0, 800);
+                } catch (_) {
+                    /* plain text body */
+                }
                 console.error('LLMIntegration: API error response:', errorText);
-                throw new Error(`API request failed with status: ${response.status} - ${errorText}`);
+                throw new Error(`API request failed with status: ${response.status} - ${detail}`);
             }
 
             const data = await response.json();
             console.log('LLMIntegration: Response data:', data);
-            
+
             if (!data.choices || !data.choices[0] || !data.choices[0].message) {
                 console.error('LLMIntegration: Invalid response format:', data);
                 throw new Error('Invalid response format from API');
             }
 
             const assistantMessage = data.choices[0].message.content;
+            if (assistantMessage == null || assistantMessage === '') {
+                console.error('LLMIntegration: Empty assistant content:', data);
+                throw new Error('Empty assistant message from API');
+            }
             console.log('LLMIntegration: Assistant message:', assistantMessage);
             
             // Add assistant response to conversation history
@@ -102,13 +204,19 @@ export class LLMIntegration {
                 stack: error.stack,
                 name: error.name
             });
-            
-            // Return a fallback response
+
+            const msg = (error && error.message) || String(error);
+            const network =
+                /Failed to fetch|NetworkError|Load failed|ECONNREFUSED/i.test(msg) ||
+                (typeof navigator !== 'undefined' && !navigator.onLine);
+            const hint = network
+                ? 'Could not reach the API server. If you use `yarn start`, keep both Node (port 3001) and webpack running; or open the app from the same `node server.js` that serves `dist/`.'
+                : msg.replace(/^API request failed with status: \d+ - /, '').slice(0, 220);
+
             if (isInitial) {
-                return `I'd be happy to help you learn about "${message}". However, I'm having trouble connecting to the AI service right now. Please try again in a moment.`;
-            } else {
-                return 'I apologize, but I\'m having trouble processing your request right now. Please try again.';
+                return `The assistant could not load a reply right now. ${hint}`;
             }
+            return `Something went wrong. ${hint}`;
         }
     }
 
@@ -168,48 +276,39 @@ export class LLMIntegration {
      * Try different models to find one that works
      * @returns {Promise<string|null>} - The working model name or null
      */
+    /**
+     * Try common Gemini model ids against this app’s `/proxy/llm` (no API keys in the browser).
+     * @returns {Promise<string|null>}
+     */
     async findWorkingModel() {
-        const models = ['GPT 4.1', 'GPT 4.1 Mini', 'GPT 4.1 Nano', 'gpt-5', 'gpt-5-chat'];
-        
+        const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'];
         for (const model of models) {
             try {
                 console.log(`LLMIntegration: Testing model: ${model}`);
                 const originalModel = this.model;
                 this.model = model;
-                
-                const response = await fetch(this.apiUrl, {
+                const response = await fetch(getLlmProxyUrl(), {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        model: model,
-                        messages: [
-                            {
-                                role: 'user',
-                                content: 'Hello'
-                            }
-                        ]
-                    })
+                        model,
+                        messages: [{ role: 'user', content: 'Hello' }],
+                    }),
                 });
-
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.choices && data.choices[0] && data.choices[0].message) {
+                    if (data.choices?.[0]?.message?.content != null) {
                         console.log(`LLMIntegration: Model ${model} works!`);
                         return model;
                     }
                 }
-                
                 this.model = originalModel;
             } catch (error) {
                 console.log(`LLMIntegration: Model ${model} failed:`, error.message);
-                this.model = this.model; // Reset to original
+                this.model = this.model;
             }
         }
-        
-        console.error('LLMIntegration: No working model found');
+        console.error('LLMIntegration: No working Gemini model found via proxy');
         return null;
     }
 }

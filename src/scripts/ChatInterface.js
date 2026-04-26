@@ -1,5 +1,9 @@
 // Chat Interface for Tag-based Conversations
 import { LLMIntegration } from './LLMIntegration.js';
+import { renderChatMarkdown } from './chatMarkdown.js';
+import { TouchKeyboard } from './TouchKeyboard.js';
+import { shouldPreferOnScreenKeyboard } from './touchKeyboardEnv.js';
+import { createBottomLoadingOverlay } from './bottomLoadingOverlay.js';
 
 export class ChatInterface {
     constructor() {
@@ -10,6 +14,12 @@ export class ChatInterface {
         this.chatSendBtn = null;
         this.chatStatus = null;
         this.chatCloseBtn = null;
+        this.touchKeyboardHost = null;
+        this.touchKeyboard = null;
+        this.chatContainer = null;
+        /** Same CSS ring loader as image API retrieval ({@link createBottomLoadingOverlay}). */
+        this.chatLoader = null;
+        this._touchScrollIsolationBound = false;
         this.currentTag = null;
         this.isLoading = false;
         
@@ -22,11 +32,13 @@ export class ChatInterface {
      */
     initializeElements() {
         this.chatModal = document.getElementById('chat-overlay-modal');
+        this.chatContainer = this.chatModal?.querySelector('.chat-container') ?? null;
         this.chatMessages = document.getElementById('chat-messages');
         this.chatInput = document.getElementById('chat-input');
         this.chatSendBtn = document.getElementById('chat-send');
         this.chatStatus = document.getElementById('chat-status');
         this.chatCloseBtn = document.getElementById('chat-close');
+        this.touchKeyboardHost = document.getElementById('chat-touch-keyboard-host');
         
         // Debug: Check if elements were found
         console.log('ChatInterface: Elements found:', {
@@ -37,6 +49,46 @@ export class ChatInterface {
             chatStatus: !!this.chatStatus,
             chatCloseBtn: !!this.chatCloseBtn
         });
+        this.setupTouchScrollIsolation();
+    }
+
+    /** Keep touch scroll inside chat panes (no preventDefault, passive listeners). */
+    setupTouchScrollIsolation() {
+        if (this._touchScrollIsolationBound || !this.chatModal) return;
+        const isolate = (event) => {
+            event.stopPropagation();
+        };
+        const selectors = ['.chat-container', '.chat-messages', '.chat-input-area', '#chat-touch-keyboard-host'];
+        selectors.forEach((selector) => {
+            const el = this.chatModal.querySelector(selector);
+            if (!el) return;
+            el.addEventListener('touchstart', isolate, { passive: true });
+            el.addEventListener('touchmove', isolate, { passive: true });
+        });
+        this._touchScrollIsolationBound = true;
+    }
+
+    /**
+     * True when we should block the system soft keyboard and rely on the on-screen keyboard
+     * (kiosk / touch / coarse pointer).
+     */
+    useTouchKeyboard() {
+        return shouldPreferOnScreenKeyboard();
+    }
+
+    teardownTouchKeyboard() {
+        if (this.touchKeyboard) {
+            this.touchKeyboard.unmount();
+            this.touchKeyboard = null;
+        }
+        if (this.touchKeyboardHost) {
+            this.touchKeyboardHost.hidden = true;
+            this.touchKeyboardHost.setAttribute('aria-hidden', 'true');
+        }
+        if (this.chatInput) {
+            this.chatInput.readOnly = false;
+            this.chatInput.removeAttribute('inputmode');
+        }
     }
 
     /**
@@ -112,8 +164,26 @@ export class ChatInterface {
         this.chatModal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
 
-        // Focus on input
-        if (this.chatInput) {
+        this.teardownTouchKeyboard();
+        const preferOnScreenKb = this.useTouchKeyboard();
+        if (this.chatInput && this.touchKeyboardHost) {
+            this.touchKeyboardHost.hidden = false;
+            this.touchKeyboardHost.setAttribute('aria-hidden', 'false');
+            this.touchKeyboard = new TouchKeyboard(this.touchKeyboardHost, this.chatInput);
+            this.touchKeyboard.mount();
+            this.touchKeyboard.setDisabled(this.isLoading);
+            if (preferOnScreenKb) {
+                this.chatInput.readOnly = true;
+                this.chatInput.setAttribute('inputmode', 'none');
+                this.chatInput.setAttribute('autocomplete', 'off');
+            } else {
+                this.chatInput.readOnly = false;
+                this.chatInput.removeAttribute('inputmode');
+            }
+            this.chatInput.focus({ preventScroll: true });
+        } else if (this.chatInput) {
+            this.chatInput.readOnly = false;
+            this.chatInput.removeAttribute('inputmode');
             this.chatInput.focus();
         }
 
@@ -125,6 +195,8 @@ export class ChatInterface {
      * Close the chat interface
      */
     closeChat() {
+        this.teardownTouchKeyboard();
+        this._hideChatLoader();
         if (this.chatModal) {
             this.chatModal.style.display = 'none';
             document.body.style.overflow = '';
@@ -154,7 +226,10 @@ export class ChatInterface {
         }
 
         console.log('ChatInterface: Getting initial response for tag:', this.currentTag);
-        this.setLoading(true);
+        this.setLoading(true, {
+            title: 'Assistant is responding…',
+            subtext: 'This may take a few seconds',
+        });
         this.updateStatus('Getting initial response...');
 
         try {
@@ -188,8 +263,11 @@ export class ChatInterface {
         this.chatInput.value = '';
         this.autoResizeTextarea();
 
-        // Set loading state
-        this.setLoading(true);
+        // Set loading state (same CSS ring loader as image retrieval)
+        this.setLoading(true, {
+            title: 'Assistant is thinking…',
+            subtext: 'This may take a few seconds',
+        });
         this.updateStatus('Thinking...');
 
         try {
@@ -210,9 +288,17 @@ export class ChatInterface {
      * @param {string} message - The message text
      */
     addUserMessage(message) {
+        this.removeInitialPlaceholderMessage();
         const messageElement = this.createMessageElement(message, 'user');
         this.chatMessages.appendChild(messageElement);
         this.scrollToBottom();
+    }
+
+    /** Remove the static "Loading..." stub so real messages don't stack under it */
+    removeInitialPlaceholderMessage() {
+        const initial = this.chatMessages?.querySelector('#initial-message');
+        const row = initial?.closest('.chat-message');
+        if (row) row.remove();
     }
 
     /**
@@ -220,6 +306,7 @@ export class ChatInterface {
      * @param {string} message - The message text
      */
     addBotMessage(message) {
+        this.removeInitialPlaceholderMessage();
         const messageElement = this.createMessageElement(message, 'bot');
         this.chatMessages.appendChild(messageElement);
         this.scrollToBottom();
@@ -244,7 +331,12 @@ export class ChatInterface {
 
         const textDiv = document.createElement('div');
         textDiv.className = 'message-text';
-        textDiv.textContent = text;
+        if (type === 'bot') {
+            textDiv.classList.add('message-text--markdown');
+            textDiv.innerHTML = renderChatMarkdown(text);
+        } else {
+            textDiv.textContent = text;
+        }
 
         const timeDiv = document.createElement('div');
         timeDiv.className = 'message-time';
@@ -284,9 +376,16 @@ export class ChatInterface {
     /**
      * Set loading state
      * @param {boolean} loading - Whether to show loading state
+     * @param {{ title?: string; subtext?: string }} [copy] - Overlay copy when showing the canvas loader
      */
-    setLoading(loading) {
+    setLoading(loading, copy = {}) {
         this.isLoading = loading;
+
+        if (loading) {
+            this._showChatLoader(copy);
+        } else {
+            this._hideChatLoader();
+        }
         
         if (this.chatSendBtn) {
             this.chatSendBtn.disabled = loading;
@@ -294,6 +393,35 @@ export class ChatInterface {
 
         if (this.chatInput) {
             this.chatInput.disabled = loading;
+        }
+        this.touchKeyboard?.setDisabled(loading);
+    }
+
+    _showChatLoader(copy = {}) {
+        this._hideChatLoader();
+        if (!this.chatContainer) return;
+        try {
+            this.chatLoader = createBottomLoadingOverlay(this.chatContainer, {
+                title: copy.title || 'Assistant is thinking…',
+                subtext: copy.subtext ?? 'This may take a few seconds',
+            });
+            this.chatLoader.root.classList.add('visible');
+            this.chatLoader.start();
+        } catch (e) {
+            console.warn('ChatInterface: could not mount chat loader', e);
+            this.chatLoader = null;
+        }
+    }
+
+    _hideChatLoader() {
+        if (this.chatLoader) {
+            try {
+                this.chatLoader.stop();
+                this.chatLoader.root.remove();
+            } catch {
+                /* ignore */
+            }
+            this.chatLoader = null;
         }
     }
 

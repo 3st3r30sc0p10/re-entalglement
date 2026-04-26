@@ -92,13 +92,13 @@
             try {
                 showResult('Testing LLM API...');
                 
-                const response = await fetch('http://localhost:3002/proxy/llm', {
+                const response = await fetch('http://127.0.0.1:3001/proxy/llm', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        model: 'GPT 4.1',
+                        model: 'gemini-2.5-flash',
                         messages: [
                             {
                                 role: 'user',

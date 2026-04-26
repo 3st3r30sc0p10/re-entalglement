@@ -1,5 +1,83 @@
 // Image APIs Integration
 import { ImageGallery } from './ImageGallery.js';
+import { createBottomLoadingOverlay } from './bottomLoadingOverlay.js';
+import goBackIcon from '../images/go-back.png';
+
+/**
+ * Base URL for API proxy (NYPL, publication, etc.).
+ * Use same origin when the dev server proxies `/proxy` → Express so publication fetch + images work from :3000.
+ */
+function getImageProxyBase() {
+    if (typeof window === 'undefined') return 'http://127.0.0.1:3001/proxy';
+    const { origin, protocol } = window.location;
+    if (protocol === 'file:' || !origin) return 'http://127.0.0.1:3001/proxy';
+    return `${origin}/proxy`;
+}
+
+/** Escape text for safe HTML interpolation in templates. */
+function escHtml(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function escAttr(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/** Public names + documentation URLs shown while loading and after results (image panel). */
+const SEARCH_SOURCE_CATALOG = [
+    {
+        key: 'publication',
+        name: 'Publication (project set)',
+        url: 'https://fhi.duke.edu',
+    },
+    {
+        key: 'chicago',
+        name: 'Art Institute of Chicago API',
+        url: 'https://api.artic.edu/docs/',
+    },
+    {
+        key: 'nypl',
+        name: 'New York Public Library Digital Collections API',
+        url: 'https://api.repo.nypl.org/',
+    },
+    {
+        key: 'met',
+        name: 'The Met Collection API',
+        url: 'https://metmuseum.github.io/',
+    },
+    {
+        key: 'openverse',
+        name: 'Openverse API',
+        url: 'https://openverse.org/docs/api_reference/index.html',
+    },
+    {
+        key: 'europeana',
+        name: 'Europeana APIs',
+        url: 'https://pro.europeana.eu/page/apis',
+    },
+    {
+        key: 'commons',
+        name: 'Wikimedia Commons API',
+        url: 'https://commons.wikimedia.org/wiki/Commons:API',
+    },
+    {
+        key: 'smithsonian',
+        name: 'Smithsonian Open Access',
+        url: 'https://www.si.edu/openaccess/devtools',
+    },
+    {
+        key: 'cleveland',
+        name: 'Cleveland Museum of Art Open Access API',
+        url: 'https://openaccess-api.clevelandart.org/',
+    },
+];
 
 export class ImageRepositories {
     constructor() {
@@ -9,37 +87,99 @@ export class ImageRepositories {
         this.nyplToken = 'zdx9mfhnl5jbvlh8';
         this.metApiUrl = 'https://collectionapi.metmuseum.org/public/collection/v1';
         this.openverseApiUrl = 'https://api.openverse.engineering/v1';
-        this.rijksApiUrl = 'https://data.rijksmuseum.nl/object-metadata/api';
-        this.rijksApiKey = '4H77aGm4';
-        this.proxyUrl = 'http://localhost:3001/proxy';
-        this.bottomPanel = document.querySelector('.bottom-panel');
+        this.proxyUrl = getImageProxyBase();
+        this.bottomPanel =
+            document.querySelector('#panel-tags-body') || document.querySelector('.bottom-panel');
         this.gallery = new ImageGallery();
         this.currentImages = []; // Store current images for gallery
         this.loader = null; // Bottom panel loading overlay controller
-        
+        /** @type {string | null} Last normalized tag string used for image search (panel header). */
+        this.lastSearchTag = null;
+
         // Mapping of API source names to official institution names
         this.institutionNames = {
             'chicago': 'Art Institute of Chicago',
             'nypl': 'New York Public Library',
             'met': 'Metropolitan Museum of Art',
             'openverse': 'Openverse (Creative Commons)',
-            'rijksmuseum': 'Rijksmuseum',
             'europeana': 'Europeana',
             'commons': 'Wikimedia Commons',
-            'smithsonian': 'Smithsonian Institution'
+            'smithsonian': 'Smithsonian Institution',
+            'cleveland': 'Cleveland Museum of Art',
+            publication: 'Publication (project set)'
         };
         
         console.log('ImageRepositories: Bottom panel found:', !!this.bottomPanel);
+    }
+
+    /** Keep touch gestures on panel scroll areas from bubbling into graph interactions. */
+    _setupTouchScrollIsolation() {
+        if (!this.bottomPanel) return;
+        const isolate = (event) => {
+            event.stopPropagation();
+        };
+        const targets = [
+            '.image-gallery',
+            '.image-gallery-api-list',
+            '.image-gallery-toolbar'
+        ];
+        targets.forEach((selector) => {
+            const el = this.bottomPanel.querySelector(selector);
+            if (!el || el.dataset.touchScrollIsolated === '1') return;
+            el.addEventListener('touchstart', isolate, { passive: true });
+            el.addEventListener('touchmove', isolate, { passive: true });
+            el.dataset.touchScrollIsolated = '1';
+        });
     }
 
     getInstitutionName(source) {
         return this.institutionNames[source] || source.toUpperCase();
     }
 
+    /** @returns {ReadonlyArray<{ key: string; name: string; url: string }>} */
+    getSearchSourceCatalog() {
+        return SEARCH_SOURCE_CATALOG;
+    }
+
+    /** @param {string} key */
+    getSourcePublicMeta(key) {
+        const row = SEARCH_SOURCE_CATALOG.find((s) => s.key === key);
+        if (row) return { ...row };
+        return {
+            key,
+            name: this.getInstitutionName(key),
+            url: '',
+        };
+    }
+
+    /**
+     * Notify the tags slide header with the tag and human-readable source names
+     * (after results or when the search finishes with no usable images).
+     * @param {string} tag
+     * @param {string[]} sourceNames
+     */
+    _emitTagsPanelImagesMeta(tag, sourceNames) {
+        const names = Array.isArray(sourceNames)
+            ? [...new Set(sourceNames.map((n) => String(n)))].filter(Boolean)
+            : [];
+        document.dispatchEvent(
+            new CustomEvent('tagsPanelImagesMeta', {
+                bubbles: true,
+                detail: { tag: String(tag ?? '').trim(), sourceNames: names },
+            })
+        );
+    }
+
     async searchImages(searchTerm) {
         try {
-            console.log('searchImages: Starting search for term:', searchTerm);
-            
+            const q = String(searchTerm ?? '')
+                .normalize('NFKC')
+                .replace(/\u00a0/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            this.lastSearchTag = q;
+            console.log('searchImages: Starting search for term:', q);
+
             // Clear previous results
             this.clearBottomPanel();
             
@@ -48,16 +188,27 @@ export class ImageRepositories {
             // Start with initial progress
             this.updateLoadingProgress(10, 'Searching repositories...');
 
-            // Fetch from all APIs concurrently
-            const [chicagoImages, nyplImages, metImages, openverseImages, rijksImages, europeanaImages, commonsImages, smithsonianImages] = await Promise.all([
-                this.fetchChicagoArt(searchTerm),
-                this.fetchNYPLImages(searchTerm),
-                this.fetchMetArt(searchTerm),
-                this.fetchOpenverseImages(searchTerm),
-                this.fetchRijksArt(searchTerm),
-                this.fetchEuropeanaImages(searchTerm),
-                this.fetchCommonsImages(searchTerm),
-                this.fetchSmithsonianImages(searchTerm)
+            // Fetch from publication set + all APIs concurrently
+            const [
+                publicationImages,
+                chicagoImages,
+                nyplImages,
+                metImages,
+                openverseImages,
+                europeanaImages,
+                commonsImages,
+                smithsonianImages,
+                clevelandImages
+            ] = await Promise.all([
+                this.fetchPublicationImages(q),
+                this.fetchChicagoArt(q),
+                this.fetchNYPLImages(q),
+                this.fetchMetArt(q),
+                this.fetchOpenverseImages(q),
+                this.fetchEuropeanaImages(q),
+                this.fetchCommonsImages(q),
+                this.fetchSmithsonianImages(q),
+                this.fetchClevelandImages(q)
             ]);
 
             // Log results from each API
@@ -74,9 +225,6 @@ export class ImageRepositories {
             console.log('\nOpenverse API:', openverseImages.length, 'images');
             openverseImages.forEach(img => console.log(`- ${img.title} (Openverse)`));
 
-            console.log('\nRijksmuseum API:', rijksImages.length, 'images');
-            rijksImages.forEach(img => console.log(`- ${img.title} (Rijksmuseum)`));
-
             console.log('\nEuropeana API:', europeanaImages.length, 'images');
             europeanaImages.forEach(img => console.log(`- ${img.title} (Europeana)`));
 
@@ -86,21 +234,81 @@ export class ImageRepositories {
             console.log('\nSmithsonian API:', smithsonianImages.length, 'images');
             smithsonianImages.forEach(img => console.log(`- ${img.title} (Smithsonian)`));
 
-            // Combine all results
-            const allImages = [...chicagoImages, ...nyplImages, ...metImages, ...openverseImages, ...rijksImages, ...europeanaImages, ...commonsImages, ...smithsonianImages];
+            console.log('\nCleveland Museum of Art API:', clevelandImages.length, 'images');
+            clevelandImages.forEach(img => console.log(`- ${img.title} (Cleveland)`));
+
+            console.log('\nPublication (local):', publicationImages.length, 'images');
+            publicationImages.forEach(img => console.log(`- ${img.title} (Publication)`));
+
+            // Combine: project publication images first, then API results
+            const allImages = [
+                ...publicationImages,
+                ...chicagoImages,
+                ...nyplImages,
+                ...metImages,
+                ...openverseImages,
+                ...europeanaImages,
+                ...commonsImages,
+                ...smithsonianImages,
+                ...clevelandImages
+            ];
             console.log('\nTotal images found:', allImages.length);
 
             if (allImages.length > 0) {
                 // Mark fetch phase complete
                 this.updateLoadingProgress(50, 'Validating images...');
-                await this.displayImages(allImages);
+                await this.displayImages(allImages, q);
             } else {
                 this.hideLoading();
                 this.bottomPanel.innerHTML = '<p>No images found for this search term.</p>';
+                this._emitTagsPanelImagesMeta(q, []);
             }
         } catch (error) {
             console.error('Error in searchImages:', error);
             this.showError();
+        }
+    }
+
+    /**
+     * Keyword-matched images from src/images-publication (spreadsheet + files), via proxy server.
+     */
+    async fetchPublicationImages(searchTerm) {
+        try {
+            const url = `${this.proxyUrl}/publication?q=${encodeURIComponent(searchTerm)}`;
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.warn('fetchPublicationImages: HTTP', response.status);
+                return [];
+            }
+            const data = await response.json();
+            const list = Array.isArray(data.images) ? data.images : [];
+            console.log(
+                'fetchPublicationImages:',
+                list.length,
+                'match(es) for',
+                JSON.stringify(searchTerm),
+                'via',
+                url
+            );
+            const toAbsoluteIfNeeded = (u) => {
+                if (!u || typeof u !== 'string') return u;
+                if (u.startsWith('http://') || u.startsWith('https://')) return u;
+                if (typeof window !== 'undefined' && u.startsWith('/') && window.location.origin) {
+                    return `${window.location.origin}${u}`;
+                }
+                return u;
+            };
+            return list.map((img) => ({
+                source: 'publication',
+                title: img.title || 'Untitled',
+                thumbnailUrl: toAbsoluteIfNeeded(img.thumbnailUrl),
+                fullUrl: toAbsoluteIfNeeded(img.fullUrl || img.thumbnailUrl),
+                license: img.license,
+                localPublication: true,
+            }));
+        } catch (e) {
+            console.warn('fetchPublicationImages:', e.message);
+            return [];
         }
     }
 
@@ -319,54 +527,6 @@ export class ImageRepositories {
         }
     }
 
-    async fetchRijksArt(searchTerm) {
-        console.log('\n=== Rijksmuseum API Search ===');
-        console.log('fetchRijksArt: Starting fetch for term:', searchTerm);
-        try {
-            const url = `${this.proxyUrl}/rijksmuseum?q=${encodeURIComponent(searchTerm)}`;
-            console.log('fetchRijksArt: Fetching from URL:', url);
-
-            const response = await fetch(url);
-
-            if (!response.ok) {
-                console.log('fetchRijksArt: API request failed with status:', response.status);
-                const errorText = await response.text();
-                console.log('fetchRijksArt: Error response:', errorText);
-                return [];
-            }
-
-            const data = await response.json();
-            console.log('fetchRijksArt: Raw data received:', data);
-
-            if (!Array.isArray(data) || data.length === 0) {
-                console.log('fetchRijksArt: No results found');
-                return [];
-            }
-
-            // Process and filter results
-            const results = data
-                .filter(artwork => artwork.webImage && artwork.webImage.url)
-                .slice(0, 10) // Limit to 10 results
-                .map(artwork => ({
-                    source: 'rijksmuseum',
-                    title: artwork.title || 'Untitled',
-                    thumbnailUrl: artwork.webImage.url.replace('=s0', '=s400'),
-                    fullUrl: artwork.webImage.url,
-                    artist: artwork.principalOrFirstMaker || 'Unknown Artist',
-                    culture: artwork.objectTypes?.[0] || 'Unknown Type'
-                }));
-
-            console.log('fetchRijksArt: Processed results:', results.length);
-            return results;
-        } catch (error) {
-            console.error('Error in fetchRijksArt:', error);
-            if (error.message) {
-                console.error('Error message:', error.message);
-            }
-            return [];
-        }
-    }
-
     async fetchEuropeanaImages(searchTerm) {
         console.log('\n=== Europeana API Search ===');
         console.log('fetchEuropeanaImages: Starting fetch for term:', searchTerm);
@@ -441,22 +601,20 @@ export class ImageRepositories {
                 return [];
             }
 
-            // Process and filter results
+            // Process and filter results (use API thumburl — manual /commons/thumb/… construction is often wrong)
             const results = Object.values(data.query.pages)
                 .filter(item => item.imageinfo && item.imageinfo[0])
                 .map(item => {
                     const imageInfo = item.imageinfo[0];
                     const metadata = imageInfo.extmetadata || {};
-                    
-                    // Construct thumbnail URL by replacing the full URL with a thumbnail version
                     const fullUrl = imageInfo.url;
-                    const thumbnailUrl = fullUrl.replace(/\/commons\//, '/commons/thumb/') + '/300px-' + item.title.replace('File:', '');
-                    
+                    const thumbnailUrl = imageInfo.thumburl || imageInfo.url;
+
                     return {
                         source: 'commons',
                         title: item.title.replace('File:', '').replace(/\.[^/.]+$/, ''),
-                        thumbnailUrl: thumbnailUrl,
-                        fullUrl: fullUrl,
+                        thumbnailUrl,
+                        fullUrl,
                         artist: metadata.Artist?.value || 'Unknown Artist',
                         license: metadata.LicenseShortName?.value || 'Unknown License',
                         culture: metadata.Categories?.value?.split('|')[0] || 'Unknown Category'
@@ -524,6 +682,62 @@ export class ImageRepositories {
         }
     }
 
+    async fetchClevelandImages(searchTerm) {
+        console.log('\n=== Cleveland Museum of Art API Search ===');
+        console.log('fetchClevelandImages: Starting fetch for term:', searchTerm);
+        try {
+            const url = `${this.proxyUrl}/cleveland?q=${encodeURIComponent(searchTerm)}&limit=10`;
+            console.log('fetchClevelandImages: Fetching from URL:', url);
+
+            const response = await fetch(url);
+            console.log('fetchClevelandImages: Response status:', response.status);
+
+            if (!response.ok) {
+                console.error('Cleveland API Error:', response.status);
+                const errorText = await response.text();
+                console.error('Cleveland API Error Details:', errorText);
+                return [];
+            }
+
+            const data = await response.json();
+            console.log('fetchClevelandImages: Raw API response:', data);
+
+            const artworks = Array.isArray(data?.data) ? data.data : [];
+            if (!artworks.length) {
+                console.log('fetchClevelandImages: No results found in response');
+                return [];
+            }
+
+            const results = artworks
+                .filter(artwork => artwork?.images?.web?.url && artwork?.share_license_status === 'CC0')
+                .map(artwork => {
+                    const webImage = artwork.images.web;
+                    const printImage = artwork.images.print;
+                    const fullImage = artwork.images.full;
+                    const creators = Array.isArray(artwork.creators) ? artwork.creators : [];
+                    const primaryCreator = creators[0];
+                    const culture = Array.isArray(artwork.culture) ? artwork.culture.join('; ') : (artwork.culture || '');
+
+                    return {
+                        source: 'cleveland',
+                        title: artwork.title || 'Untitled',
+                        thumbnailUrl: webImage.url,
+                        fullUrl: (printImage?.url || fullImage?.url || webImage.url),
+                        artist: primaryCreator?.description || 'Unknown Artist',
+                        culture,
+                        license: 'CC0 (Cleveland Museum of Art)'
+                    };
+                });
+
+            console.log('fetchClevelandImages: Processed results:', results.length);
+            return results;
+        } catch (error) {
+            console.error('Error in fetchClevelandImages:', error);
+            console.error('Error stack:', error.stack);
+            return [];
+        }
+    }
+
     clearBottomPanel() {
         console.log('clearBottomPanel: Clearing panel');
         if (this.bottomPanel) {
@@ -552,6 +766,9 @@ export class ImageRepositories {
         if (this.bottomPanel) {
             this.hideLoading();
             this.bottomPanel.innerHTML = '<p>Error loading images. Please try again.</p>';
+            if (this.lastSearchTag) {
+                this._emitTagsPanelImagesMeta(this.lastSearchTag, []);
+            }
         } else {
             console.error('showError: Bottom panel not found');
         }
@@ -572,108 +789,12 @@ export class ImageRepositories {
     }
 
     createLoadingOverlay() {
-        const overlay = document.createElement('div');
-        overlay.className = 'bottom-loading-overlay';
-        overlay.innerHTML = `
-            <div class="bottom-loading-content">
-                <canvas class="bottom-loading-canvas" width="200" height="200"></canvas>
-                <div class="bottom-loading-text" data-role="text">Loading images...</div>
-                <div class="bottom-loading-subtext" data-role="subtext">This may take a few seconds</div>
-            </div>
-        `;
-        this.bottomPanel.appendChild(overlay);
-
-        const canvas = overlay.querySelector('canvas');
-        const ctx = canvas.getContext('2d');
-        let rafId = null;
-        let progress = 0; // 0..100
-        let t = 0; // time for wave
-
-        const draw = () => {
-            const w = canvas.width;
-            const h = canvas.height;
-            ctx.clearRect(0, 0, w, h);
-
-            // Palette from CSS variables with fallbacks
-            const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-background') || '#ffffff';
-            const ringColor = getComputedStyle(document.documentElement).getPropertyValue('--color-foreground') || '#fafafa';
-            const wave1 = getComputedStyle(document.documentElement).getPropertyValue('--color-primary') || '#3b82f6';
-            const wave2 = getComputedStyle(document.documentElement).getPropertyValue('--color-secondary') || '#8b5cf6';
-            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--color-text-dark') || '#17212f';
-
-            const cx = w / 2;
-            const cy = h / 2;
-            const radius = Math.min(w, h) * 0.38;
-
-            // Background circle
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius + 16, 0, Math.PI * 2);
-            ctx.strokeStyle = ringColor.trim() || '#fafafa';
-            ctx.lineWidth = 10;
-            ctx.stroke();
-            ctx.restore();
-
-            // Clip to inner circle
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            ctx.clip();
-
-            // Compute fluid height based on progress
-            const fillRatio = Math.max(0, Math.min(progress / 100, 1));
-            const baseY = cy + radius - (2 * radius * fillRatio);
-
-            // Animate two sine waves
-            t += 0.02;
-            const drawWave = (amplitude, wavelength, speed, color, phase) => {
-                ctx.beginPath();
-                ctx.moveTo(0, h);
-                for (let x = 0; x <= w; x++) {
-                    const y = baseY + amplitude * Math.sin((x / wavelength) + (t * speed) + phase);
-                    ctx.lineTo(x, y);
-                }
-                ctx.lineTo(w, h);
-                ctx.closePath();
-                ctx.fillStyle = color;
-                ctx.fill();
-            };
-
-            drawWave(6, 24, 1.2, (wave2.trim() || '#8b5cf6'), 0);
-            drawWave(9, 32, 0.9, (wave1.trim() || '#3b82f6'), Math.PI / 2);
-
-            ctx.restore();
-
-            // Percentage text
-            ctx.save();
-            ctx.fillStyle = textColor.trim() || '#17212f';
-            ctx.font = '700 32px "Host Grotesk", system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${Math.round(progress)}%`, cx, cy);
-            ctx.restore();
-
-            rafId = requestAnimationFrame(draw);
-        };
-
-        const start = () => {
-            if (!rafId) rafId = requestAnimationFrame(draw);
-        };
-        const stop = () => {
-            if (rafId) {
-                cancelAnimationFrame(rafId);
-                rafId = null;
-            }
-        };
-        const setProgress = (p) => {
-            progress = Math.max(0, Math.min(100, p));
-        };
-        const setText = (txt) => {
-            const el = overlay.querySelector('[data-role="text"]');
-            if (el) el.textContent = txt;
-        };
-
-        return { root: overlay, canvas, start, stop, setProgress, setText };
+        const sources = this.getSearchSourceCatalog().map(({ name, url }) => ({ name, url }));
+        return createBottomLoadingOverlay(this.bottomPanel, {
+            title: 'Loading images...',
+            subtext: 'This may take a few seconds',
+            sources,
+        });
     }
 
     async validateImageUrl(url) {
@@ -737,6 +858,10 @@ export class ImageRepositories {
             this.updateLoadingProgress(50 + Math.round(progress * 0.5), `Validating images... ${progress}%`);
             
             const batchPromises = batch.map(async (image) => {
+                if (image.localPublication) {
+                    console.log('✓ Publication image (trusted local):', image.title);
+                    return image;
+                }
                 const isValid = await this.validateImageUrl(image.thumbnailUrl);
                 if (isValid) {
                     console.log('✓ Valid image:', image.title, 'from', image.source);
@@ -755,16 +880,22 @@ export class ImageRepositories {
         return validImages;
     }
 
-    async displayImages(images) {
+    async displayImages(images, searchQueryTag = null) {
         console.log('displayImages: Starting to display images:', images.length);
         if (!this.bottomPanel) {
             console.error('displayImages: Bottom panel not found');
             return;
         }
 
+        const tagForMeta = String(searchQueryTag ?? this.lastSearchTag ?? '').trim();
+
         if (!images.length) {
             console.log('displayImages: No images to display');
+            this.hideLoading();
             this.bottomPanel.innerHTML = '<p>No images found.</p>';
+            if (tagForMeta) {
+                this._emitTagsPanelImagesMeta(tagForMeta, []);
+            }
             return;
         }
 
@@ -784,21 +915,45 @@ export class ImageRepositories {
             this.hideLoading();
             this.bottomPanel.innerHTML = '<p>No valid images found for this search term.</p>';
             this.currentImages = [];
+            if (tagForMeta) {
+                this._emitTagsPanelImagesMeta(tagForMeta, []);
+            }
             return;
         }
 
         // Store current images for gallery
         this.currentImages = validImages;
 
+        const uniqueSourceKeys = [...new Set(validImages.map((im) => im.source))];
+        const apiListHtml = uniqueSourceKeys
+            .map((key) => {
+                const meta = this.getSourcePublicMeta(key);
+                const link =
+                    meta.url &&
+                    `<a class="image-gallery-api-link" href="${escAttr(meta.url)}" target="_blank" rel="noopener noreferrer">${escHtml(
+                        meta.url
+                    )}</a>`;
+                return `<li class="image-gallery-api-item"><span class="image-gallery-api-name">${escHtml(
+                    meta.name
+                )}</span>${link || ''}</li>`;
+            })
+            .join('');
+
         const galleryHTML = `
-            <div class="image-gallery-header">
-                <button class="back-to-tags-btn" id="back-to-tags-btn">
-                    <span class="button-icon">←</span>
-                    <span class="button-text">Back to Tags</span>
+            <div class="image-gallery-toolbar">
+                <button
+                    type="button"
+                    class="image-gallery-back-circle"
+                    aria-label="Go back to tags"
+                    title="Go back to tags"
+                >
+                    <img class="image-gallery-back-icon" src="${goBackIcon}" alt="" aria-hidden="true">
                 </button>
-                <div class="image-count-display">
-                    <div class="image-count-label"># Images:</div>
-                    <div class="image-count-number">${validImages.length}</div>
+                <div class="image-gallery-api-block">
+                    <h3 class="image-gallery-api-heading">Origin of Images:</h3>
+                    <ul class="image-gallery-api-list" aria-label="Image sources for this search">
+                        ${apiListHtml}
+                    </ul>
                 </div>
             </div>
             <div class="image-gallery">
@@ -824,29 +979,14 @@ export class ImageRepositories {
         console.log('displayImages: Setting gallery HTML');
         this.hideLoading();
         this.bottomPanel.innerHTML = galleryHTML;
+        this._setupTouchScrollIsolation();
+        this.bottomPanel
+            .querySelector('.image-gallery-back-circle')
+            ?.addEventListener('click', () => this.returnToTags());
 
-        // Add click handler for back to tags button
-        const backToTagsBtn = this.bottomPanel.querySelector('#back-to-tags-btn');
-        console.log('displayImages: Back to tags button found:', !!backToTagsBtn);
-        if (backToTagsBtn) {
-            // Remove any existing event listeners to prevent duplicates
-            const newBtn = backToTagsBtn.cloneNode(true);
-            backToTagsBtn.parentNode.replaceChild(newBtn, backToTagsBtn);
-            
-            // Add fresh event listener
-            newBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('Back to tags button clicked');
-                try {
-                    this.returnToTags();
-                } catch (error) {
-                    console.error('Error in returnToTags:', error);
-                }
-            });
-            console.log('displayImages: Back to tags button event listener attached');
-        } else {
-            console.error('displayImages: Back to tags button not found!');
+        const sourceDisplayNames = uniqueSourceKeys.map((key) => this.getInstitutionName(key));
+        if (tagForMeta) {
+            this._emitTagsPanelImagesMeta(tagForMeta, sourceDisplayNames);
         }
 
         // Add click handlers for thumbnails and error handling
